@@ -1,0 +1,97 @@
+#!/usr/bin/env bash
+# shellcheck disable=SC2002
+# SC2002: Useless cat
+set -euo pipefail
+
+if [ $# -lt 1 ]; then
+  echo "usage: $0 <declaration file>" >&2
+  exit 1
+fi
+
+# XXX: Functions strewn about in no particular order
+
+function inline-error { "$@" 2>&1 || : ignoring errors; }
+
+function query { pacman -Q --quiet "$@"; }
+
+function take { grep "$@" || : no matches; }
+function reject { take --invert-match "$@"; }
+
+# We sort here because we're stripping extra text off
+function without-modifier { reject '\[.*\]' | sort -u; }
+function with-modifier {
+  local pattern=" *\[$1\]$"
+  take --ignore-case "$pattern" | sed "s/$pattern//i" | sort -u
+}
+
+function strip-comments { sed 's/#.*$//'; }
+function strip-whitespace { sed 's/ *//g; /./!d'; }
+
+function set-diff { comm -23 <(echo -n "$1") <(echo -n "$2"); }
+
+function col { awk "{ print \$$1 }"; }
+
+# resolve-packages allows us to specify the provision in our config, e.g.,
+# "python-neovim" which you can pass to pacman to install the package
+# "python-pynvim". We resolve via -S (remotely) because if we have any new
+# packages, we won't be able to find them with -Q.
+function resolve-packages {
+  if ! pacman -S --print-format "%n" "$@"; then
+    echo "There were some errors resolving packages -- did you forget to mark [group] or [aur]?" >&2
+    return 1
+  fi
+}
+
+function color { printf "\e[1;%dm%s\e[0m" "$1" "$2"; }
+function green { color 32 "$1"; }
+function red { color 31 "$1"; }
+function yellow { color 33 "$1"; }
+function print-all {
+  prefix=$1
+  lines=$2
+
+  echo "$lines" | while read -r line; do
+    echo "$prefix $line"
+  done
+}
+
+function assumed {
+  echo '
+    base
+    linux
+    linux-firmware
+  '
+}
+
+packages=$({ cat "$1"; assumed; } | strip-comments | strip-whitespace)
+function packages { echo "$packages"; }
+
+aur=$(packages | with-modifier 'aur')
+groups=$(packages | with-modifier 'group')
+official=$(packages | without-modifier)
+
+# shellcheck disable=SC2086
+ungrouped=$([ -n "$groups" ] && query --groups $groups | sort -u)
+# shellcheck disable=SC2086
+resolved=$([ -n "$official" ] && resolve-packages $official | sort -u)
+combined=$(sort -u --merge <(echo -n "$resolved") <(echo -n "$aur") <(echo -n "$ungrouped"))
+
+explicit=$(query --explicit)
+unrequired=$(query --explicit --unrequired --unrequired)
+all=$(query)
+
+extra_explicit=$(set-diff "$explicit" "$combined")
+need_asdeps=$(set-diff "$extra_explicit" "$unrequired")
+need_remove=$(set-diff "$extra_explicit" "$need_asdeps")
+
+missing_explicit=$(set-diff "$combined" "$explicit")
+
+need_install=$(set-diff "$missing_explicit" "$all")
+need_asexplicit=$(set-diff "$missing_explicit" "$need_install")
+
+print-all "$(green "install")" "$need_install"
+print-all "$(red "remove")" "$need_remove"
+# pacman -D --asdeps <package>
+print-all "$(yellow "mark dependency")" "$need_asdeps"
+# pacman -D --asexplicit <package>
+print-all "$(yellow "mark explicit")" "$need_asexplicit"
