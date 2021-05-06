@@ -89,7 +89,7 @@ official=$(packages | without-modifier)
 aur=$(packages | with-modifier 'aur')
 groups=$(packages | with-modifier 'group')
 
-function query { pacman -Q --quiet "$@"; }
+function query { pacman -Q --quiet "$@" || : no results; }
 
 # `unroll str cmd ...` runs `cmd ...` passing individual lines of string as
 # separate quoted arguments.
@@ -118,9 +118,10 @@ resolved=$(unroll "$official" resolve-packages | sort -u)
 combined=$(sort -u --merge <(echo -n "$resolved") <(echo -n "$aur") <(echo -n "$ungrouped"))
 
 # Query the current state of pacman's db
+all=$(query)
 explicit=$(query --explicit)
 unrequired=$(query --explicit --unrequired --unrequired)
-all=$(query)
+unused=$(query --deps --unrequired --unrequired)
 
 # `set-diff str1 str2` returns lines in str1 that are not in str2. Both strings
 # must be sorted.
@@ -173,20 +174,16 @@ print-all "$(yellow "mark-dependency")" "$need_asdeps"
 print-all "$(yellow "mark-explicit")" "$need_asexplicit"
 print-all "$(aur-color "aur-install")" "$need_aur"
 
-if [ -z "$needs" ]; then
-  echo "Up to date"
-  exit
-fi
+function prompt {
+  read -r -p "$1"
 
-echo
-read -r -p "Proceed? [Y/n/dry]: "
-
-case "$REPLY" in
-  N|n) exit 1 ;;
-  d|dry) dry=1 ;;
-  Y|y|"") dry= ;;
-  *) echo "Unknown response" >&2; exit 1 ;;
-esac
+  case "$REPLY" in
+    N|n) exit 1 ;;
+    d|dry) dry=1 ;;
+    Y|y|"") dry= ;;
+    *) echo "c'mon, it was a simple question" >&2; exit 1 ;;
+  esac
+}
 
 function pacman {
   if [ "$dry" == 1 ]; then
@@ -196,20 +193,37 @@ function pacman {
   fi
 }
 
-function aur-install {
-  if ! can-aur-install; then
-    echo "You must manually install AUR packages:" "$@"
-  elif [ "$dry" == 1 ]; then
-    echo "$aur_install_command" "$@"
-  else
-    command $aur_install_command "$@"
-  fi
-}
+if [ -z "$needs" ]; then
+  echo "Up to date"
+else
+  function aur-install {
+    if ! can-aur-install; then
+      echo "You must manually install AUR packages:" "$@"
+    elif [ "$dry" == 1 ]; then
+      echo "$aur_install_command" "$@"
+    else
+      command $aur_install_command "$@"
+    fi
+  }
 
-unroll "$need_remove" pacman -R --unneeded
-unroll "$need_sync" pacman -S
-unroll "$need_asdeps" pacman -D --asdeps
-unroll "$need_asexplicit" pacman -D --asexplicit
-echo
+  echo
+  prompt "Proceed? [Y/n/dry]: "
 
-unroll "$need_aur" aur-install
+  unroll "$need_remove" pacman -R --unneeded
+  unroll "$need_sync" pacman -S
+  unroll "$need_asdeps" pacman -D --asdeps
+  unroll "$need_asexplicit" pacman -D --asexplicit
+
+  echo
+  unroll "$need_aur" aur-install
+fi
+
+if [ -n "$unused" ]; then
+  echo
+  print-all "$(red "prune")" "$unused"
+
+  echo
+  prompt "Remove unused packages and their unused dependencies? [Y/n/dry]: "
+
+  unroll "$unused" pacman -R --recursive
+fi
