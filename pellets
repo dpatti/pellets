@@ -31,6 +31,14 @@ function set-diff { comm -23 <(echo -n "$1") <(echo -n "$2"); }
 
 function col { awk "{ print \$$1 }"; }
 
+# `unroll str cmd ...` runs `cmd ...` passing individual lines of string as
+# separate quoted arguments.
+function unroll {
+  readarray -t args <<< "$1"
+  shift
+  "$@" "${args[@]}"
+}
+
 # resolve-packages allows us to specify the provision in our config, e.g.,
 # "python-neovim" which you can pass to pacman to install the package
 # "python-pynvim". We resolve via -S (remotely) because if we have any new
@@ -70,10 +78,8 @@ aur=$(packages | with-modifier 'aur')
 groups=$(packages | with-modifier 'group')
 official=$(packages | without-modifier)
 
-# shellcheck disable=SC2086
-ungrouped=$([ -n "$groups" ] && query --groups $groups | sort -u)
-# shellcheck disable=SC2086
-resolved=$([ -n "$official" ] && resolve-packages $official | sort -u)
+ungrouped=$([ -n "$groups" ] && unroll "$groups" query --groups | sort -u)
+resolved=$([ -n "$official" ] && unroll "$official" resolve-packages | sort -u)
 combined=$(sort -u --merge <(echo -n "$resolved") <(echo -n "$aur") <(echo -n "$ungrouped"))
 
 explicit=$(query --explicit)
