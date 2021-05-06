@@ -1,6 +1,6 @@
 # pellets
 
-A declarative `pacman` wrapper for Arch Linux. Allows you to specify an
+A declarative `pacman` wrapper for Arch Linux. Pellets allows you to specify an
 annotated config file, like this:
 
 ```
@@ -9,44 +9,49 @@ google-chrome [aur]
 vlc
 
 # Tools
-base-devel [group]
-maim # used for screenshots
+maim # used to take screenshots
 
 # X11
 xorg [group]
 xmonad
 ```
 
-Then, when you run `pellets path/to/config`, it will look at the current
-explicitly-installed packages, compare them to the list, and install, remove, or
-modify to make your system match the config file. The specific actions it can
-take are:
+Then, when you run `pellets`, it will look at the current explicitly-installed
+packages, compare them to the list, and install, remove, or modify to make your
+system match the config file.
 
-| in config | install reason       | action                       |
-|-----------|----------------------|------------------------------|
-| yes       | not installed        | install                      |
-| yes       | installed as dep     | mark as explicit             |
-| yes       | explicitly installed | none                         |
-| no        | not installed        | none                         |
-| no        | installed as dep     | none                         |
-| no        | explicitly installed | mark as dependency OR remove |
+```
+$ pellets
+install maim
+remove scrot
+mark-explicit xorg-xrandr
+
+Proceed? [Y/n/dry]:
+```
+
+The specific actions it can take are:
+
+| in config | install reason       | action                    |
+|-----------|----------------------|---------------------------|
+| yes       | not installed        | install                   |
+| yes       | installed as dep     | mark-explicit             |
+| yes       | explicitly installed | none                      |
+| no        | not installed        | none                      |
+| no        | installed as dep     | none                      |
+| no        | explicitly installed | mark-dependency OR remove |
+
+Marking a package as an explicit installation or dependency is mostly for
+bookkeeping purposes, which also lets you prune unused packages.
 
 ## AUR Packages
 
 By default, AUR packages are not installed since this isn't intended to be an
-entire toolchain for building AUR packages. Instead, you can optionally set
-`AUR_INSTALL` to some command prefix that accepts packages on the command line.
+entire toolchain for building AUR packages. Instead, you can optionally pass a
+command prefix with `--aur-install` that accepts packages on the command line.
 For example:
 
 ```
-AUR_INSTALL="aura -A" pellets path/to/config
-```
-
-Note that if you're using `sudo`, you should use `-E` to preserve the
-environment:
-
-```
-AUR_INSTALL="aura -A" sudo -E pellets path/to/config
+pellets --aur-install "aura -A"
 ```
 
 ## Notes

@@ -3,9 +3,62 @@
 # SC2002: Useless cat
 set -euo pipefail
 
-if [ $# -lt 1 ]; then
-  echo "usage: $0 <declaration file>" >&2
+user="${SUDO_USER:-$USER}"
+user_home=$(eval "echo ~$user")
+default_config_file=$user_home/.config/pellets/packages
+
+function usage {
+  echo "usage: $0 [<config>] [--aur-install <command>]"
+}
+
+function die {
+  echo "$1" >&2
+  usage >&2
   exit 1
+}
+
+config_file=
+
+while [ $# -gt 0 ]; do
+  case $1 in
+    -h|--help)
+      usage
+      echo
+      echo "<config> defaults to ~/.config/pellets/packages"
+      echo "<command> must accept multiple packages as arguments"
+      exit 0
+      ;;
+
+    --aur-install)
+      if [ -z "${2:-}" ]; then
+        die "Missing AUR install command"
+      fi
+      aur_install_command=${2?}
+      shift 2
+      ;;
+
+    *)
+      if [ -n "$config_file" ]; then
+        die "Unexpected: $1"
+      fi
+      config_file=$1
+      shift
+      ;;
+  esac
+done
+
+if [ -z "$config_file" ]; then
+  config_file=$default_config_file
+fi
+
+if [ ! -r "$config_file" ]; then
+  die "Cannot read config file: $config_file"
+fi
+
+config=$(cat "$config_file")
+
+if [ -z "$config" ]; then
+  die "Empty config file; aborting"
 fi
 
 function strip-comments { sed 's/#.*$//'; }
@@ -20,7 +73,7 @@ function assumed {
 }
 
 # Parse config
-packages=$({ cat "$1"; assumed; } | strip-comments | strip-whitespace)
+packages=$({ echo "$config"; assumed; } | strip-comments | strip-whitespace)
 function packages { echo "$packages"; }
 
 # We sort here because we're stripping extra text off
@@ -84,7 +137,7 @@ need_asexplicit=$(set-diff "$missing_explicit" "$need_install")
 need_sync=$(set-diff "$need_install" "$aur")
 need_aur=$(set-diff "$need_install" "$need_sync")
 
-function can-aur-install { [ "${AUR_INSTALL:-}" != "" ]; }
+function can-aur-install { [ "${aur_install_command:-}" != "" ]; }
 
 function color { printf "\e[1;%dm%s\e[0m" "$1" "$2"; }
 function green { color 32 "$1"; }
@@ -116,8 +169,8 @@ function print-all {
 
 print-all "$(red "remove")" "$need_remove"
 print-all "$(green "install")" "$need_sync"
-print-all "$(yellow "mark dependency")" "$need_asdeps"
-print-all "$(yellow "mark explicit")" "$need_asexplicit"
+print-all "$(yellow "mark-dependency")" "$need_asdeps"
+print-all "$(yellow "mark-explicit")" "$need_asexplicit"
 print-all "$(aur-color "aur-install")" "$need_aur"
 
 if [ -z "$needs" ]; then
@@ -144,12 +197,12 @@ function pacman {
 }
 
 function aur-install {
-  if [ -z "${AUR_INSTALL:-}" ]; then
+  if ! can-aur-install; then
     echo "You must manually install AUR packages:" "$@"
   elif [ "$dry" == 1 ]; then
-    echo "$AUR_INSTALL" "$@"
+    echo "$aur_install_command" "$@"
   else
-    command $AUR_INSTALL "$@"
+    command $aur_install_command "$@"
   fi
 }
 
