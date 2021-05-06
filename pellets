@@ -8,28 +8,35 @@ if [ $# -lt 1 ]; then
   exit 1
 fi
 
-# XXX: Functions strewn about in no particular order
-
-function inline-error { "$@" 2>&1 || : ignoring errors; }
-
-function query { pacman -Q --quiet "$@"; }
-
-function take { grep "$@" || : no matches; }
-function reject { take --invert-match "$@"; }
-
-# We sort here because we're stripping extra text off
-function without-modifier { reject '\[.*\]' | sort -u; }
-function with-modifier {
-  local pattern=" *\[$1\]$"
-  take --ignore-case "$pattern" | sed "s/$pattern//i" | sort -u
-}
-
 function strip-comments { sed 's/#.*$//'; }
 function strip-whitespace { sed 's/ *//g; /./!d'; }
 
-function set-diff { comm -23 <(echo -n "$1") <(echo -n "$2"); }
+function assumed {
+  echo '
+    base
+    linux
+    linux-firmware
+  '
+}
 
-function col { awk "{ print \$$1 }"; }
+# Parse config
+packages=$({ cat "$1"; assumed; } | strip-comments | strip-whitespace)
+function packages { echo "$packages"; }
+
+# We sort here because we're stripping extra text off
+function filter { grep "$@" || : no matches; }
+function without-modifier { filter --invert-match '\[.*\]' | sort -u; }
+function with-modifier {
+  local pattern=" *\[$1\]$"
+  filter --ignore-case "$pattern" | sed "s/$pattern//i" | sort -u
+}
+
+# Split config into three kinds
+official=$(packages | without-modifier)
+aur=$(packages | with-modifier 'aur')
+groups=$(packages | with-modifier 'group')
+
+function query { pacman -Q --quiet "$@"; }
 
 # `unroll str cmd ...` runs `cmd ...` passing individual lines of string as
 # separate quoted arguments.
@@ -50,10 +57,34 @@ function resolve-packages {
   fi
 }
 
+# Resolve and combine config
+ungrouped=$([ -n "$groups" ] && unroll "$groups" query --groups | sort -u)
+resolved=$([ -n "$official" ] && unroll "$official" resolve-packages | sort -u)
+combined=$(sort -u --merge <(echo -n "$resolved") <(echo -n "$aur") <(echo -n "$ungrouped"))
+
+# Query the current state of pacman's db
+explicit=$(query --explicit)
+unrequired=$(query --explicit --unrequired --unrequired)
+all=$(query)
+
+# `set-diff str1 str2` returns lines in str1 that are not in str2. Both strings
+# must be sorted.
+function set-diff { comm -23 <(echo -n "$1") <(echo -n "$2"); }
+
+# Use set differences
+extra_explicit=$(set-diff "$explicit" "$combined")
+need_asdeps=$(set-diff "$extra_explicit" "$unrequired")
+need_remove=$(set-diff "$extra_explicit" "$need_asdeps")
+
+missing_explicit=$(set-diff "$combined" "$explicit")
+need_install=$(set-diff "$missing_explicit" "$all")
+need_asexplicit=$(set-diff "$missing_explicit" "$need_install")
+
 function color { printf "\e[1;%dm%s\e[0m" "$1" "$2"; }
 function green { color 32 "$1"; }
 function red { color 31 "$1"; }
 function yellow { color 33 "$1"; }
+
 function print-all {
   prefix=$1
   lines=$2
@@ -62,38 +93,6 @@ function print-all {
     echo "$prefix $line"
   done
 }
-
-function assumed {
-  echo '
-    base
-    linux
-    linux-firmware
-  '
-}
-
-packages=$({ cat "$1"; assumed; } | strip-comments | strip-whitespace)
-function packages { echo "$packages"; }
-
-aur=$(packages | with-modifier 'aur')
-groups=$(packages | with-modifier 'group')
-official=$(packages | without-modifier)
-
-ungrouped=$([ -n "$groups" ] && unroll "$groups" query --groups | sort -u)
-resolved=$([ -n "$official" ] && unroll "$official" resolve-packages | sort -u)
-combined=$(sort -u --merge <(echo -n "$resolved") <(echo -n "$aur") <(echo -n "$ungrouped"))
-
-explicit=$(query --explicit)
-unrequired=$(query --explicit --unrequired --unrequired)
-all=$(query)
-
-extra_explicit=$(set-diff "$explicit" "$combined")
-need_asdeps=$(set-diff "$extra_explicit" "$unrequired")
-need_remove=$(set-diff "$extra_explicit" "$need_asdeps")
-
-missing_explicit=$(set-diff "$combined" "$explicit")
-
-need_install=$(set-diff "$missing_explicit" "$all")
-need_asexplicit=$(set-diff "$missing_explicit" "$need_install")
 
 print-all "$(green "install")" "$need_install"
 print-all "$(red "remove")" "$need_remove"
