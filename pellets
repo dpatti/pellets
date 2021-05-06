@@ -41,9 +41,11 @@ function query { pacman -Q --quiet "$@"; }
 # `unroll str cmd ...` runs `cmd ...` passing individual lines of string as
 # separate quoted arguments.
 function unroll {
-  readarray -t args <<< "$1"
-  shift
-  "$@" "${args[@]}"
+  if [ -n "$1" ]; then
+    readarray -t args <<< "$1"
+    shift
+    "$@" "${args[@]}"
+  fi
 }
 
 # resolve-packages allows us to specify the provision in our config, e.g.,
@@ -58,8 +60,8 @@ function resolve-packages {
 }
 
 # Resolve and combine config
-ungrouped=$([ -n "$groups" ] && unroll "$groups" query --groups | sort -u)
-resolved=$([ -n "$official" ] && unroll "$official" resolve-packages | sort -u)
+ungrouped=$(unroll "$groups" query --groups | sort -u)
+resolved=$(unroll "$official" resolve-packages | sort -u)
 combined=$(sort -u --merge <(echo -n "$resolved") <(echo -n "$aur") <(echo -n "$ungrouped"))
 
 # Query the current state of pacman's db
@@ -79,24 +81,82 @@ need_remove=$(set-diff "$extra_explicit" "$need_asdeps")
 missing_explicit=$(set-diff "$combined" "$explicit")
 need_install=$(set-diff "$missing_explicit" "$all")
 need_asexplicit=$(set-diff "$missing_explicit" "$need_install")
+need_sync=$(set-diff "$need_install" "$aur")
+need_aur=$(set-diff "$need_install" "$need_sync")
+
+function can-aur-install { [ "${AUR_INSTALL:-}" != "" ]; }
 
 function color { printf "\e[1;%dm%s\e[0m" "$1" "$2"; }
 function green { color 32 "$1"; }
 function red { color 31 "$1"; }
+function black { color 30 "$1"; }
 function yellow { color 33 "$1"; }
+
+function aur-color {
+  if can-aur-install; then
+    green "$@"
+  else
+    black "$@"
+  fi
+}
+
+needs=""
 
 function print-all {
   prefix=$1
   lines=$2
 
-  echo "$lines" | while read -r line; do
-    echo "$prefix $line"
-  done
+  if [ -n "$lines" ]; then
+    needs="$needs$lines"
+    echo "$lines" | while read -r line; do
+      echo "$prefix $line"
+    done
+  fi
 }
 
-print-all "$(green "install")" "$need_install"
 print-all "$(red "remove")" "$need_remove"
-# pacman -D --asdeps <package>
+print-all "$(green "install")" "$need_sync"
 print-all "$(yellow "mark dependency")" "$need_asdeps"
-# pacman -D --asexplicit <package>
 print-all "$(yellow "mark explicit")" "$need_asexplicit"
+print-all "$(aur-color "aur-install")" "$need_aur"
+
+if [ -z "$needs" ]; then
+  echo "Up to date"
+  exit
+fi
+
+echo
+read -r -p "Proceed? [Y/n/dry]: "
+
+case "$REPLY" in
+  N|n) exit 1 ;;
+  d|dry) dry=1 ;;
+  Y|y|"") dry= ;;
+  *) echo "Unknown response" >&2; exit 1 ;;
+esac
+
+function pacman {
+  if [ "$dry" == 1 ]; then
+    echo pacman "$@"
+  else
+    command pacman "$@"
+  fi
+}
+
+function aur-install {
+  if [ -z "${AUR_INSTALL:-}" ]; then
+    echo "You must manually install AUR packages:" "$@"
+  elif [ "$dry" == 1 ]; then
+    echo "$AUR_INSTALL" "$@"
+  else
+    command $AUR_INSTALL "$@"
+  fi
+}
+
+unroll "$need_remove" pacman -R --unneeded
+unroll "$need_sync" pacman -S
+unroll "$need_asdeps" pacman -D --asdeps
+unroll "$need_asexplicit" pacman -D --asexplicit
+echo
+
+unroll "$need_aur" aur-install

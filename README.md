@@ -31,15 +31,29 @@ take are:
 | no        | installed as dep     | none                         |
 | no        | explicitly installed | mark as dependency OR remove |
 
+## AUR Packages
+
+By default, AUR packages are not installed since this isn't intended to be an
+entire toolchain for building AUR packages. Instead, you can optionally set
+`AUR_INSTALL` to some command prefix that accepts packages on the command line.
+For example:
+
+```
+AUR_INSTALL="aura -A" pellets path/to/config
+```
+
+Note that if you're using `sudo`, you should use `-E` to preserve the
+environment:
+
+```
+AUR_INSTALL="aura -A" sudo -E pellets path/to/config
+```
+
 ## Notes
 
 If a package is not explicitly required and only *optionally* depended on by
 other packages, it will be removed. You should add it to your config if you wish
 to keep it.
-
-It doesn't actually do anything yet. It just prints what it would do if it were
-finished. It's probably like 5 more lines of code that I haven't written. Except
-the AUR part, that's maybe less straightforward.
 
 You can specify packages *or* provisions in the same way you could for pacman.
 This means that "python-neovim" and "python-pynvim" in the config would both
