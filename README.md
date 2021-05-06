@@ -41,7 +41,8 @@ The specific actions it can take are:
 | no        | explicitly installed | mark-dependency OR remove |
 
 Marking a package as an explicit installation or dependency is mostly for
-bookkeeping purposes, which also lets you prune unused packages.
+bookkeeping purposes. It uses this information to prompt to prune unused
+dependency packages after the previous step is complete.
 
 ## AUR Packages
 
