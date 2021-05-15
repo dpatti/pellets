@@ -106,7 +106,8 @@ function unroll {
 # "python-pynvim". We resolve via -S (remotely) because if we have any new
 # packages, we won't be able to find them with -Q.
 function resolve-packages {
-  if ! pacman -S --print-format "%n" "$@"; then
+  # --nodeps twice will make sure we only print the single package
+  if ! pacman -S --nodeps --nodeps --print-format "%n" "$@"; then
     echo "There were some errors resolving packages -- did you forget to mark [group] or [aur]?" >&2
     return 1
   fi
