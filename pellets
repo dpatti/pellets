@@ -102,7 +102,9 @@ official=$(packages | without-modifier)
 aur=$(packages | with-modifier 'aur')
 groups=$(packages | with-modifier 'group')
 
-function query { pacman -Q --quiet "$@" || : no results; }
+# We sort here because pacman returns in sorted order that isn't necessarily
+# aligned with our LC_COLLATE, causing `comm` to misbehave.
+function query { pacman -Q --quiet "$@" | sort -u || : no results; }
 
 # `unroll str cmd ...` runs `cmd ...` passing individual lines of string as
 # separate quoted arguments.
@@ -120,15 +122,15 @@ function unroll {
 # packages, we won't be able to find them with -Q.
 function resolve-packages {
   # --nodeps twice will make sure we only print the single package
-  if ! pacman -S --nodeps --nodeps --print-format "%n" "$@"; then
+  if ! pacman -S --nodeps --nodeps --print-format "%n" "$@" | sort -u; then
     echo "There were some errors resolving packages -- did you forget to mark [group] or [aur]?" >&2
     return 1
   fi
 }
 
 # Resolve and combine config
-ungrouped=$(unroll "$groups" query --groups | sort -u)
-resolved=$(unroll "$official" resolve-packages | sort -u)
+ungrouped=$(unroll "$groups" query --groups)
+resolved=$(unroll "$official" resolve-packages)
 combined=$(sort -u --merge <(echo -n "$resolved") <(echo -n "$aur") <(echo -n "$ungrouped"))
 
 # Query the current state of pacman's db
