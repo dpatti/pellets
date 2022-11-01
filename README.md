@@ -4,8 +4,15 @@
 pellets [<config>] [--aur-install <command>]
 ```
 
-A declarative `pacman` wrapper for Arch Linux. Pellets allows you to specify an
-annotated config file, like this:
+A declarative `pacman` wrapper for Arch Linux. The goal of pellets is to allow
+you to tersely specify what packages you expect to be installed and keep your
+system tidy by removing packages that aren't needed. It's also great for
+bootstrapping a new system. Pellets doesn't prevent you from installing new
+packages manually to try them out, but it will help you remember to keep a
+transcript of those you want to stay around.
+
+You start by specifying an annotated file of packages you want installed, like
+this:
 
 ```
 # Apps
@@ -81,6 +88,19 @@ If a package is not explicitly listed and only *optionally* depended on by other
 packages, it will be removed. You should add it to your config if you wish to
 keep it.
 
+### Starting out
+
+If you're starting from a blank slate, you can query what is currently installed
+on your system:
+
+```
+$ pacman -Q --quiet --explicit --native && pacman -Q --quiet --explicit --foreign | xargs printf "%s [aur]\n"
+```
+
+Many of these packages will come from groups. If you want to learn about what
+groups you might have installed, use `pacman -Q --explicit --groups` to get a
+hint. The most common groups are `base-devel` and `xorg`.
+
 ## AUR Packages
 
 By default, AUR packages are not installed since this isn't intended to be an
@@ -107,6 +127,5 @@ exec aura -A --unsuppress --noconfirm "$@"
 
 There is no installation. Just copy the `pellets` file somewhere and make it
 executable. I prefer to check it in to my dotfiles repo so it's readily
-available on a new machine.
-
-It's written in bash and will probably just break all the time.
+available on a new machine. But if there's enough interest, I can figure out how
+to provide a more formal installation method.
