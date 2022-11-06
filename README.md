@@ -123,9 +123,6 @@ will be used. For example:
 exec aura -A --unsuppress --noconfirm "$@"
 ```
 
-## Notes
+## Installation
 
-There is no installation. Just copy the `pellets` file somewhere and make it
-executable. I prefer to check it in to my dotfiles repo so it's readily
-available on a new machine. But if there's enough interest, I can figure out how
-to provide a more formal installation method.
+<https://aur.archlinux.org/packages/pellets>
