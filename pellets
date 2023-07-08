@@ -137,7 +137,6 @@ combined=$(sort -u --merge <(echo -n "$resolved") <(echo -n "$aur") <(echo -n "$
 all=$(query)
 explicit=$(query --explicit)
 unrequired=$(query --explicit --unrequired --unrequired)
-unused=$(query --deps --unrequired --unrequired)
 
 # `set-diff str1 str2` returns lines in str1 that are not in str2. Both strings
 # must be sorted.
@@ -201,7 +200,7 @@ function prompt {
   esac
 }
 
-function pacman {
+function pacman! {
   if [ "$dry" == 1 ]; then
     echo pacman "$@"
   else
@@ -225,14 +224,17 @@ else
   echo
   prompt "Proceed? [Y/n/dry]: "
 
-  unroll "$need_remove" pacman -R --unneeded
-  unroll "$need_sync" pacman -S
-  unroll "$need_asdeps" pacman -D --asdeps
-  unroll "$need_asexplicit" pacman -D --asexplicit
+  unroll "$need_remove" pacman! -R --unneeded
+  unroll "$need_sync" pacman! -S
+  unroll "$need_asdeps" pacman! -D --asdeps
+  unroll "$need_asexplicit" pacman! -D --asexplicit
 
   echo
   unroll "$need_aur" aur-install
 fi
+
+# Query for unused dependencies now that the db has potentially changed
+unused=$(query --deps --unrequired --unrequired)
 
 if [ -n "$unused" ]; then
   echo
@@ -241,5 +243,5 @@ if [ -n "$unused" ]; then
   echo
   prompt "Remove unused packages and their unused dependencies? [Y/n/dry]: "
 
-  unroll "$unused" pacman -R --recursive
+  unroll "$unused" pacman! -R --recursive
 fi
