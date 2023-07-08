@@ -196,7 +196,7 @@ function prompt {
     N|n) exit 1 ;;
     d|dry) dry=1 ;;
     Y|y|"") dry= ;;
-    *) echo "c'mon, it was a simple question" >&2; exit 1 ;;
+    *) echo "I didn't understand '$REPLY'" >&2; exit 1 ;;
   esac
 }
 
