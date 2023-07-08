@@ -126,3 +126,31 @@ exec aura -A --unsuppress --noconfirm "$@"
 ## Installation
 
 <https://aur.archlinux.org/packages/pellets>
+
+## Publishing to AUR
+
+This section is mostly for me, for when I forget the steps next time. Push a new
+tag:
+
+```
+VERSION=1.0.0
+git tag $VERSION
+git push --tags
+```
+
+Check the digest:
+
+```
+curl -L https://github.com/dpatti/pellets/archive/refs/tags/$VERSION.tar.gz | md5sum
+```
+
+Edit `PKGBUILD`, updating `pkgver` and `md5sums`. Update AUR repo:
+
+```
+git clone aur@aur.archlinux.org/pellets.git aur
+cd aur
+ln ../PKGBUILD .
+makepkg
+makepkg --printsrcinfo | tee .SRCINFO
+git ci -am $VERSION
+```
